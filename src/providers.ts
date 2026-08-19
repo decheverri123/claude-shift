@@ -1,5 +1,18 @@
 import type { ProviderId, ModelTierConfig, ModelCapability } from './types.js';
 
+
+export const DOWNLOADABLE_OLLAMA_MODELS = [
+  { label: "qwen2.5-coder:32b (🦁 Flagship 32B Code Specialist)", value: "qwen2.5-coder:32b" },
+  { label: "qwen2.5-coder:14b (⚡ Balanced 14B Daily Coder)", value: "qwen2.5-coder:14b" },
+  { label: "qwen2.5-coder:7b (🐇 Fast 7B Subagent Helper)", value: "qwen2.5-coder:7b" },
+  { label: "deepseek-r1:32b (👑 32B Deep Reasoning)", value: "deepseek-r1:32b" },
+  { label: "deepseek-r1:14b (🦁 14B Fast Reasoning)", value: "deepseek-r1:14b" },
+  { label: "deepseek-r1:8b (⚡ 8B Compact Reasoning)", value: "deepseek-r1:8b" },
+  { label: "llama3.3:70b (👑 70B Frontier Model)", value: "llama3.3:70b" },
+  { label: "llama3.2:latest (🐇 3B Ultra-lightweight Helper)", value: "llama3.2:latest" },
+  { label: "codestral:22b (🦁 Mistral 22B Code Specialist)", value: "codestral:22b" },
+];
+
 export const CAPABILITY_ICONS: Record<ModelCapability, { icon: string; label: string }> = {
   thinking: { icon: '🧠', label: 'Thinking' },
   vision: { icon: '👁️', label: 'Vision' },

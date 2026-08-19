@@ -1,6 +1,7 @@
+import { spawnSync } from "node:child_process";
 import * as p from '@clack/prompts';
 import chalk from 'chalk';
-import { PROVIDERS, fetchLocalOllamaModels, EQUIVALENCE_GUIDE, formatCapabilities, inferCapabilities } from './providers.js';
+import { PROVIDERS, fetchLocalOllamaModels, DOWNLOADABLE_OLLAMA_MODELS, EQUIVALENCE_GUIDE, formatCapabilities, inferCapabilities } from './providers.js';
 import { PRESETS } from './presets.js';
 import type { ProviderId, ModelTierConfig, ShiftConfig } from './types.js';
 import { applyShiftConfig, resetClaudeConfig, getCurrentConfiguration } from './config.js';
@@ -361,4 +362,40 @@ async function handleProviderFlow(): Promise<void> {
   const { backupPath } = applyShiftConfig(config);
   printSuccessShift(config, backupPath);
   p.outro(chalk.green('4-tier configuration successfully activated!'));
+}
+
+
+export async function handleDownloadOllamaFlow(): Promise<void> {
+  const modelChoice = await p.select({
+    message: "Select an Ollama model to pull/download:",
+    options: [
+      ...DOWNLOADABLE_OLLAMA_MODELS.map((m) => ({ label: m.label, value: m.value, hint: "Recommended" })),
+      { label: "✏️  Custom Model Tag (e.g. gemma4:e2b)...", value: "__custom__", hint: "Type any tag from ollama.com/library" },
+    ],
+  });
+
+  if (p.isCancel(modelChoice)) {
+    p.cancel("Download cancelled.");
+    return;
+  }
+
+  let targetModel = modelChoice as string;
+  if (targetModel === "__custom__") {
+    const custom = await p.text({
+      message: "Enter Ollama model tag to pull:",
+      placeholder: "qwen2.5-coder:32b",
+      validate: (val) => (!val || val.trim().length === 0 ? "Model tag cannot be empty" : undefined),
+    });
+    if (p.isCancel(custom)) return;
+    targetModel = custom as string;
+  }
+
+  console.log(chalk.cyan(`\n🚀 Starting ` + chalk.bold(`ollama pull ${targetModel}`) + `...\n`));
+  const res = spawnSync("ollama", ["pull", targetModel], { stdio: "inherit" });
+
+  if (res.status === 0) {
+    p.outro(chalk.bold.green(`✔ Successfully downloaded ${targetModel}! Run cshift to configure it.`));
+  } else {
+    p.outro(chalk.red(`✖ Failed to download ${targetModel}. Is Ollama running (` + chalk.bold("ollama serve") + `)?`));
+  }
 }

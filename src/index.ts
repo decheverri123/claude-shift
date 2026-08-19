@@ -1,7 +1,8 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { runInteractiveWizard } from './wizard.js';
+import { runInteractiveWizard, handleDownloadOllamaFlow } from './wizard.js';
 import { printStatusCard, printResetSuccess, printSuccessShift, printPresetsList, printBanner, printEquivalenceGuide } from './ui.js';
 import { resetClaudeConfig, applyShiftConfig } from './config.js';
 import { PRESETS, findPreset } from './presets.js';
@@ -47,6 +48,18 @@ program
     if (options.listPresets) {
       printBanner();
       printPresetsList(PRESETS);
+      return;
+    }
+
+    // Direct pull flag
+    if (options.pull) {
+      console.log(chalk.cyan(`\n🚀 Starting ` + chalk.bold(`ollama pull ${options.pull}`) + `...\n`));
+      const res = spawnSync("ollama", ["pull", options.pull], { stdio: "inherit" });
+      if (res.status === 0) {
+        console.log(chalk.bold.green(`\n✔ Successfully downloaded ${options.pull}!\n`));
+      } else {
+        console.log(chalk.red(`\n✖ Failed to download ${options.pull}. Is Ollama running?\n`));
+      }
       return;
     }
 
