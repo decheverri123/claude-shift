@@ -3,7 +3,7 @@
 <div align="center">
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node: >=18](https://img.shields.io/badge/node-%3E%3D18-blue.svg)](https://nodejs.org)
+[![Rust: 2021](https://img.shields.io/badge/rust-2021_edition-orange.svg)](https://www.rust-lang.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/decheverri123/claude-shift/pulls)
 
 **A fast, intuitive, zero-overhead CLI tool to instantly switch models and providers for Claude Code across 4 model tiers (Haiku, Medium, Large, Epic).**
@@ -16,6 +16,28 @@
 [Sponsor](#-support--tip-jar)
 
 </div>
+
+---
+
+## 🛠️ Build & Run
+
+`claude-shift` is now a single Rust binary — no Node/npm required. Build and run it with Cargo:
+
+```bash
+# 1. Build (first run compiles the binary; ~20s)
+cargo build --release
+./target/release/cshift
+
+# Or run directly via Cargo (recompiles as needed)
+cargo run -- init          # scaffold ~/.config/cshift/config.json
+cargo run -- --status      # show current settings
+cargo run -- --list-presets
+cargo run -- --preset "Ollama Cloud"
+cargo run -- --reset       # revert to Anthropic defaults
+cargo run                  # interactive wizard
+```
+
+First run: `cargo run -- init` creates `~/.config/cshift/config.json`, then edit it to define your own providers and presets. Presets are entirely user-defined — this tool ships no hardcoded model opinions.
 
 ---
 

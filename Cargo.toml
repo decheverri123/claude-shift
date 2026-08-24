@@ -1,0 +1,22 @@
+[package]
+name = "cshift"
+version = "0.1.0"
+edition = "2021"
+description = "A fast, zero-daemon CLI to switch Claude Code model config by rewriting ~/.claude/settings.json"
+license = "MIT"
+
+[[bin]]
+name = "cshift"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+console = "0.15"
+dialoguer = { version = "0.11", features = ["fuzzy-select"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+unicode-width = "0.2"
+ureq = "2"
+
+[dev-dependencies]
+tempfile = "3"

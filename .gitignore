@@ -1,4 +1,4 @@
-node_modules
-dist
-.DS_Store
+/target
+**/*.rs.bk
 *.log
+.DS_Store
