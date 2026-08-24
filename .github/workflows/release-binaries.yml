@@ -55,7 +55,8 @@ jobs:
           cd target/${{ matrix.target }}/release
           bin="cshift"
           [ "${{ matrix.os }}" = "windows-latest" ] && bin="cshift.exe"
-          tar czf "$GITHUB_WORKSPACE/cshift-${{ matrix.target }}.tar.gz" "$bin"
+          tar czf "cshift-${{ matrix.target }}.tar.gz" "$bin"
+          mv "cshift-${{ matrix.target }}.tar.gz" "$GITHUB_WORKSPACE/"
 
       - name: Hash artifacts
         shell: bash
