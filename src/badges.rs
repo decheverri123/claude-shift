@@ -37,9 +37,11 @@ pub fn infer_capabilities(model_name: &str) -> Vec<Capability> {
     };
 
     // Thinking / reasoning
-    if ["r1", "thinking", "reason", "o1", "o3", "fable", "mythos", "pro"]
-        .iter()
-        .any(|k| m.contains(k))
+    if [
+        "r1", "thinking", "reason", "o1", "o3", "fable", "mythos", "pro",
+    ]
+    .iter()
+    .any(|k| m.contains(k))
         || m.contains("3.7-sonnet")
         || m.contains("sonnet-3.7")
     {
@@ -57,9 +59,18 @@ pub fn infer_capabilities(model_name: &str) -> Vec<Capability> {
     }
 
     // Tool use / function calling
-    if ["coder", "claude", "qwen", "deepseek", "llama", "codestral", "jan-code", "gpt"]
-        .iter()
-        .any(|k| m.contains(k))
+    if [
+        "coder",
+        "claude",
+        "qwen",
+        "deepseek",
+        "llama",
+        "codestral",
+        "jan-code",
+        "gpt",
+    ]
+    .iter()
+    .any(|k| m.contains(k))
     {
         push(Capability::Tools, &mut caps);
     }
@@ -88,10 +99,7 @@ pub fn infer_capabilities(model_name: &str) -> Vec<Capability> {
 
 /// Renders capability badges as a spaced icon string, e.g. "🧠 👁️ 🛠️".
 pub fn format_capabilities(caps: &[Capability]) -> String {
-    caps.iter()
-        .map(|c| c.icon())
-        .collect::<Vec<_>>()
-        .join(" ")
+    caps.iter().map(|c| c.icon()).collect::<Vec<_>>().join(" ")
 }
 
 #[cfg(test)]

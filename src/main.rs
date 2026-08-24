@@ -45,12 +45,29 @@ struct Cli {
     /// Open config.json in your default editor/viewer.
     #[arg(long)]
     open_config: bool,
+
+    /// Show current status with a preset's tier values overlaid as a preview.
+    /// Lets you see what would change without actually applying.
+    #[arg(long, value_name = "PRESET")]
+    preview: Option<String>,
 }
 
 fn main() {
     let cli = Cli::parse();
 
-    if cli.init.as_deref() == Some("init") {
+    match cli.init.as_deref() {
+        Some("init") => {}
+        Some(other) => {
+            eprintln!(
+                "error: unknown argument '{}'. Use `cshift init` to scaffold config, or omit subcommand for the wizard.",
+                other
+            );
+            std::process::exit(1);
+        }
+        None => {}
+    }
+
+    if cli.init.is_some() {
         ui::print_banner();
         let path = config::config_path();
         let created = if !path.exists() {
@@ -117,11 +134,33 @@ fn main() {
         return;
     }
 
+    if let Some(name) = &cli.preview {
+        ui::print_banner();
+        let st = settings::CurrentStatus::read();
+        match config::load_config() {
+            Ok(cfg) => match cfg.find_preset(name) {
+                Some(p) => ui::print_status_card(&st, Some(&cfg), Some(p)),
+                None => {
+                    eprintln!(
+                        "error: unknown preset \"{}\". Use --list-presets to see options.",
+                        name
+                    );
+                    std::process::exit(1);
+                }
+            },
+            Err(e) => {
+                eprintln!("error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
     if cli.status {
         ui::print_banner();
         let st = settings::CurrentStatus::read();
         let cfg = config::load_config().ok();
-        ui::print_status_card(&st, cfg.as_ref());
+        ui::print_status_card(&st, cfg.as_ref(), None);
         return;
     }
 
@@ -158,7 +197,10 @@ fn main() {
         let preset = match cfg.find_preset(name) {
             Some(p) => p,
             None => {
-                eprintln!("error: unknown preset \"{}\". Use --list-presets to see options.", name);
+                eprintln!(
+                    "error: unknown preset \"{}\". Use --list-presets to see options.",
+                    name
+                );
                 std::process::exit(1);
             }
         };

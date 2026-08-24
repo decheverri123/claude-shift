@@ -29,13 +29,21 @@ esac
 
 target="${arch_tag}-${os_tag}"
 asset="cshift-${target}.tar.gz"
-url="https://github.com/${REPO}/releases/latest/download/${asset}"
+base="https://github.com/${REPO}/releases/latest/download"
 
 echo "Downloading ${asset}..."
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-curl -fsSL "$url" -o "$tmp/$asset"
+curl -fsSL "$base/${asset}" -o "$tmp/$asset"
+curl -fsSL "$base/SHA256SUMS" -o "$tmp/SHA256SUMS"
+
+# Verify the tarball against published SHA256 checksums.
+(cd "$tmp" && sha256sum -c SHA256SUMS) || {
+  echo "error: tarball hash mismatch; refusing to install." >&2
+  exit 1
+}
+
 tar xzf "$tmp/$asset" -C "$tmp"
 
 mkdir -p "$INSTALL_DIR"

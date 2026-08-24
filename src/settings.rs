@@ -4,6 +4,20 @@ use std::path::PathBuf;
 
 use serde_json::{Map, Value};
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
+/// Writes `bytes` to `path` and, on Unix, tightens the mode to 0o600 so the
+/// file is owner-read/write only. Parent dir creation is the caller's job.
+fn write_secret_file(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    fs::write(path, bytes)?;
+    #[cfg(unix)]
+    {
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
 /// Serializes tests that mutate the process-global env vars (`CSHIFT_CLAUDE_DIR`,
 /// `HOME`). Cargo runs unit tests in one process across threads, so env-setting
 /// tests must not overlap.
@@ -44,8 +58,7 @@ pub fn settings_path() -> PathBuf {
 
 fn ensure_claude_dir() -> Result<(), String> {
     let dir = claude_dir();
-    fs::create_dir_all(&dir)
-        .map_err(|e| format!("failed to create {}: {}", dir.display(), e))
+    fs::create_dir_all(&dir).map_err(|e| format!("failed to create {}: {}", dir.display(), e))
 }
 
 /// Reads settings.json into a JSON object. Missing or malformed file yields an
@@ -69,8 +82,15 @@ pub fn write_settings(settings: &Value) -> Result<(), String> {
     let raw = serde_json::to_string_pretty(settings)
         .map_err(|e| format!("failed to serialize settings: {}", e))?;
     let tmp = path.with_extension(format!("json.tmp.{}", std::process::id()));
-    fs::write(&tmp, raw).map_err(|e| format!("failed to write {}: {}", tmp.display(), e))?;
+    write_secret_file(&tmp, raw.as_bytes())
+        .map_err(|e| format!("failed to write {}: {}", tmp.display(), e))?;
     fs::rename(&tmp, &path).map_err(|e| format!("failed to write {}: {}", path.display(), e))?;
+    // Tighten permissions on the final file too (rename preserves perms on
+    // most platforms, but be defensive).
+    #[cfg(unix)]
+    {
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+    }
     Ok(())
 }
 
@@ -93,8 +113,7 @@ pub fn backup_settings() -> Result<Option<PathBuf>, String> {
 
     let ts = chrono_timestamp();
     let backup = bdir.join(format!("settings.json.cshift-backup-{}", ts));
-    fs::copy(&path, &backup)
-        .map_err(|e| format!("failed to back up {}: {}", path.display(), e))?;
+    fs::copy(&path, &backup).map_err(|e| format!("failed to back up {}: {}", path.display(), e))?;
 
     prune_old_backups(&bdir, 5);
     prune_legacy_backups(&claude_dir());
@@ -102,6 +121,11 @@ pub fn backup_settings() -> Result<Option<PathBuf>, String> {
     Ok(Some(backup))
 }
 
+// Backup pruning is intentionally best-effort and non-atomic: this is a
+// single-user CLI and the worst case is one stale file surviving past the
+// retention cap. Concurrent `cshift` invocations may race here; the cost of
+// `flock`-ing the backups dir is not worth it for a tool meant to be run
+// interactively.
 fn prune_old_backups(dir: &std::path::Path, max_keep: usize) {
     if let Ok(entries) = fs::read_dir(dir) {
         let mut backups: Vec<PathBuf> = entries
@@ -167,7 +191,11 @@ impl CurrentStatus {
     /// no custom env or modelOverrides are present.
     pub fn read() -> CurrentStatus {
         let s = read_settings();
-        let env = s.get("env").and_then(|v| v.as_object()).cloned().unwrap_or_default();
+        let env = s
+            .get("env")
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_default();
         let overrides = s
             .get("modelOverrides")
             .and_then(|v| v.as_object())

@@ -1,11 +1,26 @@
-use std::path::Path;
 use console::{style, Color};
+use std::path::Path;
 use unicode_width::UnicodeWidthStr;
 
 use crate::apply::ApplyOutcome;
 use crate::badges::{format_capabilities, infer_capabilities};
-use crate::config::Config;
+use crate::config::{Config, Preset};
 use crate::settings::CurrentStatus;
+
+/// Best-effort provider label from base URL when the user hasn't told us
+/// which preset they came from. Returns the full pretty name (e.g.
+/// "Ollama (Local & Cloud)"). Custom endpoints fall through to "Custom Provider".
+fn provider_label_from_url(url: &str) -> &'static str {
+    if url.contains("11434") {
+        "Ollama (Local & Cloud)"
+    } else if url.contains("1234") {
+        "LM Studio"
+    } else if url.contains("openrouter") {
+        "OpenRouter"
+    } else {
+        "Custom Provider"
+    }
+}
 
 /// Renders a boxed card with rounded corners, a styled title, and auto-padded content lines.
 pub fn render_box(title: &str, content_lines: &[String], border_color: Color) -> String {
@@ -30,7 +45,11 @@ pub fn render_box(title: &str, content_lines: &[String], border_color: Color) ->
     let content_row = |line: &str| -> String {
         let raw = console::strip_ansi_codes(line);
         let w = UnicodeWidthStr::width(raw.as_ref());
-        let pad = if max_width >= w + 2 { max_width - w - 2 } else { 0 };
+        let pad = if max_width >= w + 2 {
+            max_width - w - 2
+        } else {
+            0
+        };
         format!(" {}  {}{}{}\n", b(" │"), line, " ".repeat(pad), b("│"))
     };
 
@@ -93,12 +112,12 @@ pub fn print_banner() {
 
     // Reversed Claude/Anthropic sunset orange gradient steps (Dark burnt amber -> Bright apricot)
     let orange_steps = [
-        (185, 40, 0),    // Rich burnt amber (#B92800)
-        (215, 55, 0),    // Deep rust orange (#D73700)
-        (240, 75, 5),    // Terracotta orange (#F04B05)
-        (255, 105, 15),  // Vivid Claude flame orange (#FF690F)
-        (255, 140, 40),  // Warm gold orange (#FF8C28)
-        (255, 175, 75),  // Bright apricot amber (#FFAF4B)
+        (185, 40, 0),   // Rich burnt amber (#B92800)
+        (215, 55, 0),   // Deep rust orange (#D73700)
+        (240, 75, 5),   // Terracotta orange (#F04B05)
+        (255, 105, 15), // Vivid Claude flame orange (#FF690F)
+        (255, 140, 40), // Warm gold orange (#FF8C28)
+        (255, 175, 75), // Bright apricot amber (#FFAF4B)
     ];
 
     let lines: Vec<&str> = title.trim_matches('\n').lines().collect();
@@ -113,11 +132,20 @@ pub fn print_banner() {
     println!();
 }
 
-/// Prints the active status card in a boxed container.
-pub fn print_status_card(current: &CurrentStatus, config_opt: Option<&Config>) {
+/// Prints the active status card in a boxed container. When `selected` is
+/// `Some`, that preset's tier values are shown alongside the running values
+/// so the user can see exactly what switching would change.
+pub fn print_status_card(
+    current: &CurrentStatus,
+    config_opt: Option<&Config>,
+    selected: Option<&Preset>,
+) {
     let (title, border_color) = if current.is_default {
         (
-            format!("{} Active: Anthropic Official (Default)", style("✔").fg(Color::Color256(214)).bold()),
+            format!(
+                "{} Active: Anthropic Official (Default)",
+                style("✔").fg(Color::Color256(214)).bold()
+            ),
             Color::Color256(214), // Warm golden amber
         )
     } else {
@@ -134,23 +162,15 @@ pub fn print_status_card(current: &CurrentStatus, config_opt: Option<&Config>) {
 
         let provider_name = matching_preset
             .map(|p| p.provider.as_str())
-            .or_else(|| {
-                current.base_url.as_deref().and_then(|u| {
-                    if u.contains("11434") {
-                        Some("Ollama (Local & Cloud)")
-                    } else if u.contains("1234") {
-                        Some("LM Studio")
-                    } else if u.contains("openrouter") {
-                        Some("OpenRouter")
-                    } else {
-                        None
-                    }
-                })
-            })
+            .or_else(|| current.base_url.as_deref().map(provider_label_from_url))
             .unwrap_or("Custom Provider");
 
         (
-            format!("{} Active: {}", style("★").fg(Color::Color256(208)).bold(), provider_name),
+            format!(
+                "{} Active: {}",
+                style("★").fg(Color::Color256(208)).bold(),
+                provider_name
+            ),
             Color::Color256(208), // Vivid vibrant orange
         )
     };
@@ -170,19 +190,19 @@ pub fn print_status_card(current: &CurrentStatus, config_opt: Option<&Config>) {
         }
     }
 
-    let provider_display = if let Some(url) = &current.base_url {
-        if url.contains("11434") {
-            "OLLAMA"
-        } else if url.contains("1234") {
-            "LM-STUDIO"
-        } else if url.contains("openrouter") {
-            "OPENROUTER"
-        } else {
-            "CUSTOM"
-        }
-    } else {
-        "ANTHROPIC"
-    };
+    if let Some(p) = selected {
+        lines.push(format!(
+            "{}   {}",
+            style("Highlighted:").dim(),
+            style(format!("{} → (preview)", p.name)).cyan().bold()
+        ));
+    }
+
+    let provider_display = current
+        .base_url
+        .as_deref()
+        .map(provider_label_from_url)
+        .unwrap_or("ANTHROPIC");
 
     lines.push(format!(
         "{}      {}",
@@ -205,9 +225,19 @@ pub fn print_status_card(current: &CurrentStatus, config_opt: Option<&Config>) {
     }
 
     lines.push(String::new());
-    lines.push(style("Active 4 Model Tiers:").bold().underlined().to_string());
+    lines.push(
+        style("Active 4 Model Tiers:")
+            .bold()
+            .underlined()
+            .to_string(),
+    );
 
-    let fmt_tier = |icon_tier: &str, role: &str, model: Option<&str>, default_model: &str| -> String {
+    let fmt_tier = |icon_tier: &str,
+                    role: &str,
+                    model: Option<&str>,
+                    default_model: &str,
+                    preview: Option<&str>|
+     -> String {
         let display_model = model.unwrap_or(default_model);
         let caps = format_capabilities(&infer_capabilities(display_model));
         let caps_str = if !caps.is_empty() {
@@ -216,39 +246,58 @@ pub fn print_status_card(current: &CurrentStatus, config_opt: Option<&Config>) {
             "".to_string()
         };
         let model_str = style(display_model).white().bold().to_string();
+        let preview_str = match preview {
+            Some(p) => format!("  {} {}", style("→").dim(), style(p).yellow().bold()),
+            None => "".to_string(),
+        };
 
         format!(
-            "  {} {}   {}{}",
+            "  {} {}   {}{}{}",
             icon_tier,
             style(role).dim(),
             model_str,
-            caps_str
+            caps_str,
+            preview_str
         )
     };
 
+    let preview_tiers = selected.map(|p| p.tiers());
+    let preview_epic = preview_tiers.as_ref().and_then(|t| t.epic.as_deref());
+    let preview_large = preview_tiers.as_ref().and_then(|t| t.large.as_deref());
+    let preview_medium = preview_tiers.as_ref().and_then(|t| t.medium.as_deref());
+    let preview_haiku = preview_tiers.as_ref().and_then(|t| t.haiku.as_deref());
+
     lines.push(fmt_tier(
-        &style("👑 Epic Model  ").magenta().bright().bold().to_string(),
+        &style("👑 Epic Model  ")
+            .magenta()
+            .bright()
+            .bold()
+            .to_string(),
         "(Frontier/Agents):",
         current.epic.as_deref(),
         "claude-fable-5",
+        preview_epic,
     ));
     lines.push(fmt_tier(
         &style("🦁 Large Model ").red().bright().bold().to_string(),
         "(Opus/Hybrid):    ",
         current.large.as_deref(),
-        "claude-3-7-sonnet / claude-3-opus",
+        "claude-opus-5 / claude-sonnet-5",
+        preview_large,
     ));
     lines.push(fmt_tier(
         &style("⚡ Medium Model").cyan().bright().bold().to_string(),
         "(Sonnet/Coding):  ",
         current.medium.as_deref(),
-        "claude-3-5-sonnet",
+        "claude-sonnet-5",
+        preview_medium,
     ));
     lines.push(fmt_tier(
         &style("🐇 Haiku Model ").green().bright().bold().to_string(),
         "(Haiku/Worker):   ",
         current.haiku.as_deref(),
-        "claude-3-5-haiku",
+        "claude-haiku-4.5",
+        preview_haiku,
     ));
 
     lines.push(String::new());
@@ -266,9 +315,10 @@ pub fn print_success_shift(outcome: &ApplyOutcome) {
     let mut lines: Vec<String> = Vec::new();
 
     lines.push(format!(
-        "{} Claude Code successfully shifted to {}!",
+        "{} Claude Code successfully shifted to {} ({})!",
         style("✔").green().bold(),
-        style(&outcome.preset_name).cyan().bold()
+        style(&outcome.preset_name).cyan().bold(),
+        style(&outcome.provider_name).dim()
     ));
     lines.push(String::new());
 
@@ -285,16 +335,15 @@ pub fn print_success_shift(outcome: &ApplyOutcome) {
             .map(|m| style(m).white().bold().to_string())
             .unwrap_or_else(|| style("(left as-is)").dim().to_string());
 
-        format!(
-            "  {}    {}{}",
-            icon_tier,
-            model_str,
-            caps_str
-        )
+        format!("  {}    {}{}", icon_tier, model_str, caps_str)
     };
 
     lines.push(fmt_tier(
-        &style("👑 Epic Tier:  ").magenta().bright().bold().to_string(),
+        &style("👑 Epic Tier:  ")
+            .magenta()
+            .bright()
+            .bold()
+            .to_string(),
         outcome.tiers.epic.as_deref(),
     ));
     lines.push(fmt_tier(
@@ -332,7 +381,10 @@ pub fn print_success_shift(outcome: &ApplyOutcome) {
         style("claude").bold()
     ));
 
-    let title = style(" Configuration Applied ").fg(Color::Color256(208)).bold().to_string();
+    let title = style(" Configuration Applied ")
+        .fg(Color::Color256(208))
+        .bold()
+        .to_string();
     print!("{}", render_box(&title, &lines, Color::Color256(208)));
 }
 
@@ -345,8 +397,16 @@ pub fn print_reset_success(backup_path: Option<&Path>) {
         style("✔").fg(Color::Color256(214)).bold()
     ));
     lines.push(String::new());
-    lines.push(style("• Custom ANTHROPIC_BASE_URL and custom tokens cleared.").dim().to_string());
-    lines.push(style("• Model overrides and aliases reset to official defaults.").dim().to_string());
+    lines.push(
+        style("• Custom ANTHROPIC_BASE_URL and custom tokens cleared.")
+            .dim()
+            .to_string(),
+    );
+    lines.push(
+        style("• Model overrides and aliases reset to official defaults.")
+            .dim()
+            .to_string(),
+    );
     lines.push(
         style("• Standard Claude Fable 5 / 3.7 Sonnet / Opus / 3.5 Sonnet / Haiku restored.")
             .dim()
@@ -362,7 +422,10 @@ pub fn print_reset_success(backup_path: Option<&Path>) {
         ));
     }
 
-    let title = style(" Defaults Restored ").fg(Color::Color256(214)).bold().to_string();
+    let title = style(" Defaults Restored ")
+        .fg(Color::Color256(214))
+        .bold()
+        .to_string();
     print!("{}", render_box(&title, &lines, Color::Color256(214)));
 }
 
@@ -370,7 +433,9 @@ pub fn print_reset_success(backup_path: Option<&Path>) {
 pub fn print_equivalence_guide() {
     println!(
         "{}",
-        style("\n  📚 Cross-Provider Model Equivalence & Capability Guide:\n").fg(Color::Color256(208)).bold()
+        style("\n  📚 Cross-Provider Model Equivalence & Capability Guide:\n")
+            .fg(Color::Color256(208))
+            .bold()
     );
 
     struct GuideSection {
@@ -387,42 +452,75 @@ pub fn print_equivalence_guide() {
             badges: &["🧠", "👁️", "🛠️"],
             equivalents: &[
                 ("Anthropic Direct", "claude-fable-5", &["🧠", "👁️", "🛠️"]),
-                ("OpenRouter", "deepseek/deepseek-r1 / z-ai/glm-5", &["🧠", "🛠️", "🌐"]),
-                ("Ollama Cloud", "deepseek-v4-pro:cloud / deepseek-r1:cloud", &["🧠", "🛠️", "🌐"]),
-                ("Local (Ollama / LM Studio)", "deepseek-r1:70b / llama3.3:70b", &["🧠", "🛠️", "🔒"]),
+                (
+                    "Cloud",
+                    "deepseek-v4-pro:cloud · minimax-m3:cloud · kimi-k3:cloud",
+                    &["🧠", "🛠️", "🌐"],
+                ),
+                (
+                    "Local (Ollama / LM Studio)",
+                    "deepseek-r1:70b · llama3.3:70b",
+                    &["🧠", "🛠️", "🔒"],
+                ),
             ],
         },
         GuideSection {
             tier_name: "🦁 Large Tier",
-            role: "Flagship coding, hybrid reasoning & heavy architecture (Opus & Sonnet 3.7 tier)",
+            role: "Flagship coding, hybrid reasoning & heavy architecture (Opus 5 / Sonnet 5)",
             badges: &["🧠", "🛠️"],
             equivalents: &[
-                ("Anthropic Direct", "claude-3-7-sonnet-latest / claude-3-opus-latest", &["🧠", "👁️", "🛠️"]),
-                ("OpenRouter", "minimax/minimax-01 / google/gemini-2.5-pro / z-ai/glm-4.7 / qwen/qwen-2.5-coder-32b-instruct", &["🧠", "👁️", "🛠️", "🌐"]),
-                ("Ollama Cloud", "minimax-m3:cloud / deepseek-v4-flash:cloud", &["⚡", "🛠️", "🌐"]),
-                ("Local (Ollama / LM Studio)", "qwen2.5-coder:32b / deepseek-r1:32b", &["🧠", "🛠️", "🔒"]),
+                (
+                    "Anthropic Direct",
+                    "claude-opus-5 / claude-sonnet-5",
+                    &["🧠", "👁️", "🛠️"],
+                ),
+                (
+                    "Cloud",
+                    "deepseek-v4-flash:cloud · kimi-k2.6:cloud · mistral-large-3:cloud",
+                    &["⚡", "🛠️", "🌐"],
+                ),
+                (
+                    "Local (Ollama / LM Studio)",
+                    "qwen2.5-coder:32b · deepseek-r1:32b",
+                    &["🧠", "🛠️", "🔒"],
+                ),
             ],
         },
         GuideSection {
             tier_name: "⚡ Medium Tier",
-            role: "Fast, reliable daily coding driver & refactoring (Sonnet 3.5 tier)",
+            role: "Fast, reliable daily coding driver & refactoring (Sonnet 5)",
             badges: &["⚡", "🛠️"],
             equivalents: &[
-                ("Anthropic Direct", "claude-3-5-sonnet-latest", &["👁️", "🛠️"]),
-                ("OpenRouter", "deepseek/deepseek-chat / google/gemini-2.5-flash / z-ai/glm-4.7-flash", &["⚡", "👁️", "🛠️", "🌐"]),
-                ("Ollama Cloud", "qwen3.5:cloud / deepseek-v4-flash:cloud", &["⚡", "🛠️", "🌐"]),
-                ("Local (Ollama / LM Studio)", "qwen2.5-coder:14b / llama3.1:8b", &["⚡", "🛠️", "🔒"]),
+                ("Anthropic Direct", "claude-sonnet-5", &["🧠", "👁️", "🛠️"]),
+                (
+                    "Cloud",
+                    "kimi-k2.7-code:cloud · glm-5.2:cloud · nemotron-3-super:cloud",
+                    &["⚡", "🛠️", "🌐"],
+                ),
+                (
+                    "Local (Ollama / LM Studio)",
+                    "qwen2.5-coder:14b · llama3.1:8b",
+                    &["⚡", "🛠️", "🔒"],
+                ),
             ],
         },
         GuideSection {
             tier_name: "🐇 Haiku Tier",
-            role: "Ultra-fast subagents, background file indexing, git commits & searches (Haiku tier)",
+            role:
+                "Ultra-fast subagents, background file indexing, git commits & searches (Haiku 4.5)",
             badges: &["⚡", "🛠️"],
             equivalents: &[
-                ("Anthropic Direct", "claude-3-5-haiku-latest", &["⚡", "🛠️"]),
-                ("OpenRouter", "google/gemini-2.5-flash-lite / qwen/qwen-2.5-coder-7b-instruct / meta-llama/llama-3.1-8b-instruct", &["⚡", "🛠️", "🌐"]),
-                ("Ollama Cloud", "gemma4:cloud", &["⚡", "🌐"]),
-                ("Local (Ollama / LM Studio)", "qwen2.5-coder:7b / qwen2.5-coder:1.5b", &["⚡", "🔒"]),
+                ("Anthropic Direct", "claude-haiku-4.5", &["⚡", "🛠️"]),
+                (
+                    "Cloud",
+                    "gemma4:cloud · qwen3.5:cloud · nemotron-3-nano:cloud",
+                    &["⚡", "🌐"],
+                ),
+                (
+                    "Local (Ollama / LM Studio)",
+                    "qwen2.5-coder:7b · qwen2.5-coder:1.5b",
+                    &["⚡", "🔒"],
+                ),
             ],
         },
     ];
@@ -463,7 +561,10 @@ pub fn print_equivalence_guide() {
         println!();
     }
 
-    println!("  {}", style("Capability Badges Legend:").underlined().bold());
+    println!(
+        "  {}",
+        style("Capability Badges Legend:").underlined().bold()
+    );
     println!(
         "  {}\n",
         style("🧠 Thinking   👁️ Vision   🛠️ Tools   ⚡ Fast   🌐 Cloud   🔒 Local").dim()
@@ -474,13 +575,16 @@ pub fn print_equivalence_guide() {
 pub fn print_presets_list(config: &Config) {
     println!(
         "{}",
-        style("\n  Available Claude Shift Presets (4 Tiers):\n").cyan().bold()
+        style("\n  Available Claude Shift Presets (4 Tiers):\n")
+            .cyan()
+            .bold()
     );
 
     if config.presets.is_empty() {
         println!(
             "  {}",
-            style("No presets defined. Run `cshift init` or edit ~/.config/cshift/config.json.").dim()
+            style("No presets defined. Run `cshift init` or edit ~/.config/cshift/config.json.")
+                .dim()
         );
         return;
     }
@@ -497,6 +601,10 @@ pub fn print_presets_list(config: &Config) {
             style(&p.name).white().bold(),
             style(format!("[--preset \"{}\"]", p.name)).dim()
         );
+
+        if let Some(details) = &p.details {
+            println!("     {}", style(details).dim().italic());
+        }
 
         let tiers = p.tiers();
         println!(
@@ -535,18 +643,33 @@ mod tests {
     fn all_lines_share_the_same_visible_width() {
         let out = render_box(
             "Title",
-            &["short".to_string(), "a longer content line here".to_string()],
+            &[
+                "short".to_string(),
+                "a longer content line here".to_string(),
+            ],
             Color::White,
         );
         let widths = visible_line_widths(&out);
-        assert!(widths.windows(2).all(|w| w[0] == w[1]), "uneven widths: {:?}", widths);
+        assert!(
+            widths.windows(2).all(|w| w[0] == w[1]),
+            "uneven widths: {:?}",
+            widths
+        );
     }
 
     #[test]
     fn wide_unicode_title_keeps_lines_aligned() {
-        let out = render_box("👑 Epic Model  Status", &["plain line".to_string()], Color::White);
+        let out = render_box(
+            "👑 Epic Model  Status",
+            &["plain line".to_string()],
+            Color::White,
+        );
         let widths = visible_line_widths(&out);
-        assert!(widths.windows(2).all(|w| w[0] == w[1]), "uneven widths: {:?}", widths);
+        assert!(
+            widths.windows(2).all(|w| w[0] == w[1]),
+            "uneven widths: {:?}",
+            widths
+        );
     }
 
     #[test]
@@ -559,13 +682,21 @@ mod tests {
     fn empty_title_does_not_panic_and_stays_aligned() {
         let out = render_box("", &["x".to_string()], Color::White);
         let widths = visible_line_widths(&out);
-        assert!(widths.windows(2).all(|w| w[0] == w[1]), "uneven widths: {:?}", widths);
+        assert!(
+            widths.windows(2).all(|w| w[0] == w[1]),
+            "uneven widths: {:?}",
+            widths
+        );
     }
 
     #[test]
     fn narrow_content_hits_the_minimum_box_width() {
         let out = render_box("t", &["x".to_string()], Color::White);
         let widths = visible_line_widths(&out);
-        assert!(widths.iter().all(|&w| w >= 74), "expected minimum width of 74: {:?}", widths);
+        assert!(
+            widths.iter().all(|&w| w >= 74),
+            "expected minimum width of 74: {:?}",
+            widths
+        );
     }
 }

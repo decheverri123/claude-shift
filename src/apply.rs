@@ -3,30 +3,33 @@ use serde_json::{json, Map, Value};
 use crate::config::{self, Config, Preset};
 use crate::settings;
 
-/// Outcome of a successful apply, with enough info for the confirmation print.
 #[derive(Debug)]
 pub struct ApplyOutcome {
     pub preset_name: String,
-    #[allow(dead_code)]
     pub provider_name: String,
     pub base_url: String,
     pub tiers: config::PresetTiers,
     pub backup: Option<std::path::PathBuf>,
 }
 
-/// Canonical Claude model names that `modelOverrides` maps onto the tier
-/// models, mirroring the old `config.ts:applyShiftConfig`.
-const OVERRIDE_KEYS: &[&str] = &[
-    "claude-fable-5",
-    "claude-mythos-5",
-    "claude-3-opus-latest",
-    "claude-opus-3-20240229",
-    "claude-3-7-sonnet-latest",
-    "claude-3-7-sonnet-20250219",
-    "claude-3-5-sonnet-latest",
-    "claude-3-5-sonnet-20241022",
-    "claude-3-5-haiku-latest",
-    "claude-3-5-haiku-20241022",
+/// Canonical Claude model IDs and the tier their value is sourced from.
+/// Exact match — no substring routing — so a future model rename can't silently
+/// land in the wrong tier.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)] // variants surface in tests; matches() is exhaustive
+enum Tier {
+    Epic,
+    Large,
+    Medium,
+    Haiku,
+}
+
+const OVERRIDE_KEYS: &[(&str, Tier)] = &[
+    ("claude-fable-5", Tier::Epic),
+    ("claude-mythos-5", Tier::Epic),
+    ("claude-opus-5", Tier::Large),
+    ("claude-sonnet-5", Tier::Large),
+    ("claude-haiku-4-5-20251001", Tier::Haiku),
 ];
 
 /// Validates a preset before any write: provider must exist. Tier values may
@@ -84,9 +87,9 @@ pub fn apply_preset(config: &Config, preset: &Preset) -> Result<ApplyOutcome, St
     // Build modelOverrides only from tiers that are actually set.
     let overrides: Map<String, Value> = OVERRIDE_KEYS
         .iter()
-        .filter_map(|key| {
-            let model = tier_for_key(key, &tiers)?;
-            Some((key.to_string(), json!(model)))
+        .filter_map(|(key, tier)| {
+            let model = model_for_tier(*tier, &tiers)?;
+            Some(((*key).to_string(), json!(model)))
         })
         .collect();
     if overrides.is_empty() {
@@ -110,17 +113,15 @@ pub fn apply_preset(config: &Config, preset: &Preset) -> Result<ApplyOutcome, St
     })
 }
 
-/// Maps a canonical override key to the tier model it should resolve to. Only
-/// returns Some when that tier is actually set in the preset.
-fn tier_for_key<'a>(key: &str, tiers: &'a config::PresetTiers) -> Option<&'a str> {
-    if key.starts_with("claude-fable") || key.starts_with("claude-mythos") {
-        tiers.epic.as_deref()
-    } else if key.contains("opus") || key.contains("3-7-sonnet") {
-        tiers.large.as_deref()
-    } else if key.contains("3-5-sonnet") {
-        tiers.medium.as_deref()
-    } else {
-        tiers.haiku.as_deref()
+/// Returns the preset model that should populate this override key's tier,
+/// or None when the user hasn't set that tier (we don't write a stale
+/// override that would override their running selection).
+fn model_for_tier(tier: Tier, tiers: &config::PresetTiers) -> Option<&str> {
+    match tier {
+        Tier::Epic => tiers.epic.as_deref(),
+        Tier::Large => tiers.large.as_deref(),
+        Tier::Medium => tiers.medium.as_deref(),
+        Tier::Haiku => tiers.haiku.as_deref(),
     }
 }
 
@@ -219,7 +220,10 @@ mod tests {
         let s = settings::read_settings();
         assert_eq!(s["env"]["ANTHROPIC_DEFAULT_HAIKU_MODEL"], "keep-me");
         // Other tiers were overwritten by the preset.
-        assert_eq!(s["env"]["ANTHROPIC_DEFAULT_FABLE_MODEL"], "qwen2.5-coder:32b");
+        assert_eq!(
+            s["env"]["ANTHROPIC_DEFAULT_FABLE_MODEL"],
+            "qwen2.5-coder:32b"
+        );
     }
 
     #[test]

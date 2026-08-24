@@ -29,7 +29,15 @@ pub fn run_wizard(config: &Config) -> Result<(), String> {
             config.clone()
         });
 
-        ui::print_status_card(&st, Some(&latest_config));
+        ui::print_status_card(&st, Some(&latest_config), None);
+        if let Some(first) = latest_config.presets.first() {
+            println!(
+                "  {} Press {} to preview applying {}.",
+                style("💡").yellow(),
+                style("1").cyan().bold(),
+                style(&first.name).cyan().bold()
+            );
+        }
         println!();
 
         let theme = ColorfulTheme::default();
@@ -98,27 +106,18 @@ fn handle_guide_flow() -> Result<(), String> {
     Ok(())
 }
 
-/// Handles the "Quick Presets" flow.
+/// Handles the "Quick Presets" flow. Re-renders the status card with the
+/// currently-highlighted preset's values overlaid so the user can see what
+/// would change before confirming.
 fn handle_presets_flow(config: &Config) -> Result<FlowResult, String> {
     let theme = ColorfulTheme::default();
 
     let mut items: Vec<String> = config
         .presets
         .iter()
-        .map(|p| {
-            let tiers = p.tiers();
-            let mut summary = Vec::new();
-            if let Some(m) = &tiers.epic {
-                summary.push(format!("Epic: {}", m));
-            }
-            if let Some(m) = &tiers.large {
-                summary.push(format!("Large: {}", m));
-            }
-            if summary.is_empty() {
-                format!("{:<20} ({})", p.name, p.provider)
-            } else {
-                format!("{:<20} [{}] ({})", p.name, summary.join(", "), p.provider)
-            }
+        .map(|p| match &p.details {
+            Some(d) if !d.is_empty() => format!("{:<20} · {}", p.name, d),
+            _ => p.name.clone(),
         })
         .collect();
 
@@ -129,16 +128,33 @@ fn handle_presets_flow(config: &Config) -> Result<FlowResult, String> {
 
     let item_refs: Vec<&str> = items.iter().map(|s| s.as_str()).collect();
 
-    let selection = Select::with_theme(&theme)
-        .with_prompt("Select a quick configuration preset (4-tier)")
-        .items(&item_refs)
-        .default(0)
-        .interact_opt()
-        .map_err(|e| format!("wizard error: {}", e))?;
+    // Manual cursor loop so we can re-render the status card with the
+    // highlighted preset's preview on every move. dialoguer's `Select` blocks
+    // and offers no per-cursor callback.
+    let mut cursor: usize = 0;
+    let index = loop {
+        ui::print_banner();
+        let st = CurrentStatus::read();
+        let preview = if cursor < config.presets.len() {
+            Some(&config.presets[cursor])
+        } else {
+            None
+        };
+        ui::print_status_card(&st, Some(config), preview);
+        println!();
 
-    let index = match selection {
-        Some(i) => i,
-        None => return Ok(FlowResult::Back),
+        let selection = Select::with_theme(&theme)
+            .with_prompt("Select a quick configuration preset (4-tier)")
+            .items(&item_refs)
+            .default(cursor)
+            .interact_opt()
+            .map_err(|e| format!("wizard error: {}", e))?;
+
+        match selection {
+            Some(i) if i == cursor => break i,
+            Some(i) => cursor = i,
+            None => return Ok(FlowResult::Back),
+        }
     };
 
     if index == back_idx {
@@ -153,7 +169,36 @@ fn handle_presets_flow(config: &Config) -> Result<FlowResult, String> {
     let preset = &config.presets[index];
 
     if preset.provider == "ollama" {
-        refresh_ollama_warning(config);
+        match missing_local_models(config, preset) {
+            Some(missing) if !missing.is_empty() => {
+                println!(
+                    "{}",
+                    style(format!(
+                        "warn: Ollama at {} is missing local model(s): {}; the apply will still run, but those tiers will fall back to whatever Claude Code resolves.",
+                        config
+                            .providers
+                            .get("ollama")
+                            .map(|p| p.base_url.as_str())
+                            .unwrap_or("http://localhost:11434"),
+                        missing.join(", ")
+                    ))
+                    .yellow()
+                );
+                let proceed = Confirm::with_theme(&theme)
+                    .with_prompt("Apply anyway?")
+                    .default(true)
+                    .interact()
+                    .map_err(|e| format!("wizard error: {}", e))?;
+                if !proceed {
+                    return Ok(FlowResult::Back);
+                }
+            }
+            _ => {
+                // Some(missing) but empty => every tier present or is cloud.
+                // None => Ollama unreachable. Neither path needs an apply warning.
+                refresh_ollama_warning(config);
+            }
+        }
     }
 
     let outcome = apply_preset(config, preset).map_err(|e| {
@@ -171,7 +216,11 @@ pub fn open_or_show_config_file() {
     let path = config::config_path();
     if !path.exists() {
         if let Ok(p) = config::init() {
-            println!("  {} Created starter config at {}", style("✔").green(), p.display());
+            println!(
+                "  {} Created starter config at {}",
+                style("✔").green(),
+                p.display()
+            );
         }
     }
 
@@ -188,7 +237,8 @@ pub fn open_or_show_config_file() {
         "\n  {} {}\n  {}\n",
         style("Settings file:").bold().cyan(),
         style(path.display()).white().underlined(),
-        style("Add or edit custom presets in the JSON file above, then select them in cshift.").dim()
+        style("Add or edit custom presets in the JSON file above, then select them in cshift.")
+            .dim()
     );
 }
 
@@ -239,7 +289,11 @@ fn handle_configure_flow(config: &Config) -> Result<FlowResult, String> {
         if !dynamic_ollama.is_empty() {
             println!(
                 "{}",
-                style(format!("✔ Detected {} local Ollama models!", dynamic_ollama.len())).green()
+                style(format!(
+                    "✔ Detected {} local Ollama models!",
+                    dynamic_ollama.len()
+                ))
+                .green()
             );
         }
     }
@@ -265,9 +319,9 @@ fn handle_configure_flow(config: &Config) -> Result<FlowResult, String> {
         ),
         _ => (
             "claude-fable-5",
-            "claude-3-7-sonnet",
-            "claude-3-5-sonnet",
-            "claude-3-5-haiku",
+            "claude-sonnet-5",
+            "claude-sonnet-5",
+            "claude-haiku-4-5-20251001",
         ),
     };
 
@@ -367,12 +421,14 @@ fn handle_configure_flow(config: &Config) -> Result<FlowResult, String> {
             if use_env {
                 "$OPENROUTER_API_KEY".to_string()
             } else {
+                warn_plaintext_secret();
                 Password::with_theme(&theme)
                     .with_prompt("Enter OpenRouter API Key")
                     .interact()
                     .map_err(|e| format!("password input error: {}", e))?
             }
         } else {
+            warn_plaintext_secret();
             Password::with_theme(&theme)
                 .with_prompt("Enter OpenRouter API Key")
                 .interact()
@@ -402,6 +458,7 @@ fn handle_configure_flow(config: &Config) -> Result<FlowResult, String> {
         large: Some(large_model),
         medium: Some(medium_model),
         haiku: Some(haiku_model),
+        details: None,
     };
 
     let outcome = apply_preset(&working_config, &temp_preset).map_err(|e| {
@@ -435,7 +492,7 @@ fn prompt_model_tier(
     let suggestions: &[&str] = match (provider_id, tier) {
         ("openrouter", "epic") => &[
             "deepseek/deepseek-r1",
-            "z-ai/glm-5",
+            "z-ai/glm-5.3",
             "thudm/glm-4-plus",
             "deepseek/deepseek-r1-0528",
             "deepseek/deepseek-r1-distill-llama-70b",
@@ -513,24 +570,26 @@ fn prompt_model_tier(
             "deepseek-r1-distill-qwen-7b",
             "qwen2.5-coder-1.5b-instruct",
         ],
+        // Fallback suggestions for the Anthropic-direct / custom tier when
+        // the user hasn't picked a hosted provider. OpenRouter slugs live
+        // outside this list — see the openrouter branches above — because
+        // OpenRouter aliases change faster than Anthropic model IDs and
+        // should be curated separately against https://openrouter.ai/models.
         _ => match tier {
-            "epic" => &["claude-fable-5", "deepseek/deepseek-r1", "deepseek-r1:70b", "z-ai/glm-5"],
+            "epic" => &["claude-fable-5", "claude-mythos-5"],
             "large" => &[
-                "claude-3-7-sonnet",
-                "claude-3-opus",
-                "minimax/minimax-01",
-                "google/gemini-2.5-pro",
+                "claude-sonnet-5",
+                "claude-opus-5",
                 "qwen2.5-coder:32b",
+                "deepseek-r1:32b",
             ],
             "medium" => &[
-                "claude-3-5-sonnet",
-                "deepseek/deepseek-chat",
-                "google/gemini-2.5-flash",
+                "claude-sonnet-5",
                 "qwen2.5-coder:14b",
+                "deepseek/deepseek-chat",
             ],
             _ => &[
-                "claude-3-5-haiku",
-                "google/gemini-2.5-flash-lite",
+                "claude-haiku-4-5-20251001",
                 "qwen2.5-coder:7b",
                 "gemma4:cloud",
             ],
@@ -606,7 +665,9 @@ fn prompt_model_tier(
 fn handle_reset_flow() -> Result<FlowResult, String> {
     let theme = ColorfulTheme::default();
     let confirm = Confirm::with_theme(&theme)
-        .with_prompt("Are you sure you want to reset Claude Code back to official Anthropic defaults?")
+        .with_prompt(
+            "Are you sure you want to reset Claude Code back to official Anthropic defaults?",
+        )
         .default(true)
         .interact()
         .map_err(|e| format!("confirm error: {}", e))?;
@@ -628,6 +689,58 @@ fn handle_reset_flow() -> Result<FlowResult, String> {
     }
 }
 
+/// Prints a one-shot reminder that the literal key the user is about to type
+/// will be written to `~/.config/cshift/config.json` in plaintext (mode 0o600).
+/// Env-var interpolation (`$OPENROUTER_API_KEY`) keeps secrets out of disk.
+fn warn_plaintext_secret() {
+    println!(
+        "{}",
+        style(
+            "warn: typing a literal key stores it in plaintext at ~/.config/cshift/config.json. \
+             Prefer `$ENV_VAR` interpolation so the secret stays in your shell environment.",
+        )
+        .yellow()
+    );
+}
+
+/// For a preset targeting Ollama, returns the subset of tier models that
+/// aren't present on the user's local Ollama instance. Empty list (or None)
+/// means every tier model is present or Ollama is unreachable. Used to warn
+/// before mutating settings.json with values Claude Code will fail to load.
+///
+/// Tier values that end in `:cloud` are skipped: those models are fetched
+/// server-side by Ollama's cloud gateway, not from the local `/api/tags`
+/// listing. Comparing them against local tags produces a false-positive
+/// warning on every cloud-only preset.
+fn missing_local_models(config: &Config, preset: &Preset) -> Option<Vec<String>> {
+    let base_url = config.providers.get("ollama")?.base_url.clone();
+    let tags = ollama::fetch_ollama_tags(&base_url);
+    if tags.is_empty() {
+        // Ollama unreachable — return None so caller falls through to the
+        // existing "unreachable" warning instead of presenting a misleading
+        // missing-model list.
+        return None;
+    }
+    let mut missing = Vec::new();
+    let tiers = preset.tiers();
+    for (label, model) in [
+        ("epic", tiers.epic.as_deref()),
+        ("large", tiers.large.as_deref()),
+        ("medium", tiers.medium.as_deref()),
+        ("haiku", tiers.haiku.as_deref()),
+    ] {
+        if let Some(m) = model {
+            if m.ends_with(":cloud") {
+                continue;
+            }
+            if !tags.iter().any(|t| t == m) {
+                missing.push(format!("{}={}", label, m));
+            }
+        }
+    }
+    Some(missing)
+}
+
 /// If the Ollama provider is defined, probe `/api/tags`.
 fn refresh_ollama_warning(config: &Config) {
     let base_url = match config.providers.get("ollama") {
@@ -647,7 +760,11 @@ fn refresh_ollama_warning(config: &Config) {
     } else {
         println!(
             "{}",
-            style(format!("info: detected {} local Ollama model(s).", tags.len())).green()
+            style(format!(
+                "info: detected {} local Ollama model(s).",
+                tags.len()
+            ))
+            .green()
         );
     }
 }

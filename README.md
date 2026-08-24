@@ -4,7 +4,6 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust: 2021](https://img.shields.io/badge/rust-2021_edition-orange.svg)](https://www.rust-lang.org)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/decheverri123/claude-shift/pulls)
 
 **A fast, intuitive, zero-overhead CLI tool to instantly switch models and providers for Claude Code across 4 model tiers (Haiku, Medium, Large, Epic).**
 
@@ -27,6 +26,15 @@ curl -fsSL https://raw.githubusercontent.com/decheverri123/claude-shift/main/ins
 ```
 
 Downloads the prebuilt `cshift` binary for your OS/arch to `~/.local/bin` — no Rust toolchain required. Covers macOS (Intel/Apple Silicon), Linux (x86_64/aarch64), and Windows under a bash shell (Git Bash, MSYS2, WSL).
+
+### Verifying the download
+
+The release pipeline publishes two artifacts for every tag:
+
+- `cshift-<target>.tar.gz` — the binary
+- `SHA256SUMS` — sha256 of every binary tarball
+
+`install.sh` verifies the tarball's hash against `SHA256SUMS` before extracting. Set `CSHIFT_SKIP_VERIFY=1` to skip this check.
 
 ---
 
@@ -158,4 +166,4 @@ If `claude-shift` saved you money on API tokens or streamlined your workflow, co
 
 ## 📄 License
 
-MIT License © 2026
+MIT License © 2026 Danny (@decheverri123)

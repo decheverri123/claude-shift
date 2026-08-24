@@ -48,7 +48,16 @@ jobs:
           [ "${{ matrix.os }}" = "windows-latest" ] && bin="cshift.exe"
           tar czf "$GITHUB_WORKSPACE/cshift-${{ matrix.target }}.tar.gz" "$bin"
 
+      - name: Hash artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          sha256sum cshift-*.tar.gz > SHA256SUMS
+
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
-          files: cshift-${{ matrix.target }}.tar.gz
+          files: |
+            cshift-${{ matrix.target }}.tar.gz
+            SHA256SUMS

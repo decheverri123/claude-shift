@@ -47,9 +47,17 @@ fn init_then_preset_then_reset_roundtrip() {
 
     // 1. init scaffolds config with default providers.
     let out = run_cmd(&["init"]);
-    assert!(out.status.success(), "init failed: {}", String::from_utf8_lossy(&out.stderr));
-    let cfg: Value = serde_json::from_str(&fs::read_to_string(config_dir.join("config.json")).unwrap()).unwrap();
-    assert_eq!(cfg["providers"]["ollama"]["base_url"], "http://localhost:11434");
+    assert!(
+        out.status.success(),
+        "init failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let cfg: Value =
+        serde_json::from_str(&fs::read_to_string(config_dir.join("config.json")).unwrap()).unwrap();
+    assert_eq!(
+        cfg["providers"]["ollama"]["base_url"],
+        "http://localhost:11434"
+    );
     assert!(cfg["presets"].as_array().unwrap().is_empty());
 
     // 2. Add a preset, then apply it via --preset.
@@ -71,7 +79,11 @@ fn init_then_preset_then_reset_roundtrip() {
     );
 
     let out = run_cmd(&["--preset", "TestOllama"]);
-    assert!(out.status.success(), "--preset failed: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "--preset failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let s: Value = serde_json::from_str(&fs::read_to_string(&settings_file).unwrap()).unwrap();
     let env = s["env"].as_object().unwrap();
@@ -85,7 +97,11 @@ fn init_then_preset_then_reset_roundtrip() {
 
     // 3. Reset; settings.json should be reverted (env/modelOverrides cleared).
     let out = run_cmd(&["--reset"]);
-    assert!(out.status.success(), "--reset failed: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "--reset failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let s: Value = serde_json::from_str(&fs::read_to_string(&settings_file).unwrap()).unwrap();
     assert_eq!(s.get("env"), None);
@@ -96,9 +112,17 @@ fn init_then_preset_then_reset_roundtrip() {
     let backups: Vec<_> = fs::read_dir(claude.path().join("backups/cshift"))
         .unwrap()
         .filter_map(|e| e.ok())
-        .filter(|e| e.file_name().to_string_lossy().starts_with("settings.json.cshift-backup-"))
+        .filter(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .starts_with("settings.json.cshift-backup-")
+        })
         .collect();
-    assert_eq!(backups.len(), 1, "expected one backup from the preset apply");
+    assert_eq!(
+        backups.len(),
+        1,
+        "expected one backup from the preset apply"
+    );
 }
 
 #[test]

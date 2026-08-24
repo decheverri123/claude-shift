@@ -3,19 +3,30 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 use serde::{Deserialize, Serialize};
 
 /// Default providers scaffolded by `cshift init`. All expose a real
 /// Anthropic Messages-compatible `/v1/messages` endpoint (verified live).
-pub const DEFAULT_PROVIDERS: &[(&str, &str, &str)] = &[
+pub(crate) const DEFAULT_PROVIDERS: &[(&str, &str, &str)] = &[
     ("ollama", "http://localhost:11434", "ollama"),
     ("lmstudio", "http://localhost:1234", "lm-studio"),
-    ("openrouter", "https://openrouter.ai/api", "$OPENROUTER_API_KEY"),
+    (
+        "openrouter",
+        "https://openrouter.ai/api",
+        "$OPENROUTER_API_KEY",
+    ),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
     pub base_url: String,
+    /// `auth_token` is written verbatim to `~/.config/cshift/config.json`.
+    /// For any real secret, prefer the `$ENV_VAR` form so the value lives in
+    /// your shell environment, not on disk. Plain tokens are tolerated for
+    /// local providers (Ollama, LM Studio) where the value is a placeholder.
     pub auth_token: String,
 }
 
@@ -43,6 +54,11 @@ pub struct Preset {
     pub medium: Option<String>,
     #[serde(default)]
     pub haiku: Option<String>,
+    /// Optional one-line description of the preset's ideal usage — surfaced
+    /// in the preset list and the wizard menu so users can scan intent before
+    /// applying.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
 }
 
 impl Preset {
@@ -122,28 +138,36 @@ pub fn load_config() -> Result<Config, String> {
     }
     let raw = fs::read_to_string(&path)
         .map_err(|e| format!("could not read {}: {}", path.display(), e))?;
-    serde_json::from_str(&raw)
-        .map_err(|e| format!("malformed config at {}: {}", path.display(), e))
+    serde_json::from_str(&raw).map_err(|e| format!("malformed config at {}: {}", path.display(), e))
 }
 
-/// Writes a config to disk, creating the parent dir if needed.
 pub fn write_config(config: &Config) -> Result<PathBuf, String> {
     let path = config_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("failed to create {}: {}", parent.display(), e))?;
+        // 0o700 on the parent prevents other users from listing the dir.
+        #[cfg(unix)]
+        let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
     }
     let raw = serde_json::to_string_pretty(config)
         .map_err(|e| format!("failed to serialize config: {}", e))?;
     fs::write(&path, raw).map_err(|e| format!("failed to write {}: {}", path.display(), e))?;
+    // config.json may contain auth tokens in plaintext; lock to 0o600.
+    #[cfg(unix)]
+    {
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+    }
     Ok(path)
 }
 
-/// Scaffolds a starter config file with default providers and zero presets.
 pub fn init() -> Result<PathBuf, String> {
     let path = config_path();
     if path.exists() {
-        return Err(format!("{} already exists; leaving it untouched", path.display()));
+        return Err(format!(
+            "{} already exists; leaving it untouched",
+            path.display()
+        ));
     }
     let path = write_config(&Config::default_config())?;
     Ok(path)
@@ -190,6 +214,7 @@ mod tests {
                 large: None,
                 medium: None,
                 haiku: None,
+                details: None,
             }],
         };
         assert!(c.find_preset("ollama").is_some());
