@@ -4,6 +4,7 @@ mod apply;
 mod badges;
 mod config;
 mod ollama;
+mod paths;
 mod settings;
 mod ui;
 mod wizard;
@@ -41,9 +42,9 @@ struct Cli {
     #[arg(short = 'g', long)]
     guide: bool,
 
-    /// Pull an Ollama model by tag (e.g. qwen2.5-coder:32b).
-    #[arg(long, value_name = "MODEL")]
-    pull: Option<String>,
+    /// Open config.json in your default editor/viewer.
+    #[arg(long)]
+    open_config: bool,
 }
 
 fn main() {
@@ -51,14 +52,46 @@ fn main() {
 
     if cli.init.as_deref() == Some("init") {
         ui::print_banner();
-        match config::init() {
-            Ok(path) => {
-                println!("Created {}", path.display());
-                println!("Edit it to add your own presets, then run `cshift`.");
+        let path = config::config_path();
+        let created = if !path.exists() {
+            match config::init() {
+                Ok(p) => {
+                    println!(
+                        "  {} Created starter config at: {}\n  Edit it to add your custom presets & endpoints, then run `cshift`.\n",
+                        console::style("✔").green().bold(),
+                        console::style(p.display()).cyan().bold()
+                    );
+                    true
+                }
+                Err(e) => {
+                    eprintln!("error: {}", e);
+                    std::process::exit(1);
+                }
             }
-            Err(e) => {
-                eprintln!("error: {}", e);
-                std::process::exit(1);
+        } else {
+            println!(
+                "  {} Configuration file already exists at: {}\n",
+                console::style("ℹ").cyan().bold(),
+                console::style(path.display()).cyan().bold()
+            );
+            false
+        };
+
+        if console::user_attended() {
+            let prompt_msg = if created {
+                "Would you like to open config.json now?"
+            } else {
+                "Would you like to open your existing config.json now?"
+            };
+
+            let open_now = dialoguer::Confirm::new()
+                .with_prompt(prompt_msg)
+                .default(true)
+                .interact()
+                .unwrap_or(false);
+
+            if open_now {
+                wizard::open_or_show_config_file();
             }
         }
         return;
@@ -92,30 +125,9 @@ fn main() {
         return;
     }
 
-    if let Some(model) = &cli.pull {
+    if cli.open_config {
         ui::print_banner();
-        let cfg = match config::load_config() {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("error: {}", e);
-                std::process::exit(1);
-            }
-        };
-        let base_url = match cfg.providers.get("ollama") {
-            Some(p) => p.base_url.clone(),
-            None => {
-                eprintln!("error: no \"ollama\" provider in config. Run `cshift init` first.");
-                std::process::exit(1);
-            }
-        };
-        println!("Pulling {} from {}...", model, base_url);
-        match ollama::pull_model(&base_url, model) {
-            Ok(()) => println!("Done."),
-            Err(e) => {
-                eprintln!("error: {}", e);
-                std::process::exit(1);
-            }
-        }
+        wizard::open_or_show_config_file();
         return;
     }
 

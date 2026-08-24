@@ -1,38 +1,4 @@
-use std::io::BufRead;
 use std::time::Duration;
-
-/// Pulls a model into a local Ollama instance via `POST /api/pull`, streaming
-/// NDJSON progress lines and printing each distinct status as it arrives.
-/// Long-running by nature (multi-GB downloads), so the timeout is generous.
-pub fn pull_model(base_url: &str, model: &str) -> Result<(), String> {
-    let url = format!("{}/api/pull", base_url.trim_end_matches('/'));
-    let body = serde_json::json!({ "name": model, "stream": true }).to_string();
-    let res = ureq::post(&url)
-        .timeout(Duration::from_secs(3600))
-        .set("Content-Type", "application/json")
-        .send_string(&body)
-        .map_err(|e| format!("failed to reach Ollama at {}: {}", url, e))?;
-
-    let mut last_status = String::new();
-    for line in std::io::BufReader::new(res.into_reader()).lines() {
-        let line = line.map_err(|e| format!("error reading pull stream: {}", e))?;
-        if line.trim().is_empty() {
-            continue;
-        }
-        let value: serde_json::Value = serde_json::from_str(&line)
-            .map_err(|e| format!("malformed pull response: {}", e))?;
-        if let Some(err) = value.get("error").and_then(|v| v.as_str()) {
-            return Err(err.to_string());
-        }
-        if let Some(status) = value.get("status").and_then(|v| v.as_str()) {
-            if status != last_status {
-                println!("{}", status);
-                last_status = status.to_string();
-            }
-        }
-    }
-    Ok(())
-}
 
 /// Fetches the live model tag list from a local Ollama instance via
 /// `GET /api/tags`. Best-effort by design: any failure (unreachable, non-2xx,

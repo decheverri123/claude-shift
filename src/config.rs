@@ -100,10 +100,10 @@ pub fn resolve_auth_token(token: &str) -> Result<String, String> {
 }
 
 pub fn config_dir() -> PathBuf {
-    PathBuf::from(env::var("CSHIFT_CONFIG_DIR").unwrap_or_else(|_| {
-        let home = env::var("HOME").expect("HOME is not set");
-        format!("{}/.config/cshift", home)
-    }))
+    match env::var("CSHIFT_CONFIG_DIR") {
+        Ok(dir) => PathBuf::from(dir),
+        Err(_) => crate::paths::home_dir().join(".config").join("cshift"),
+    }
 }
 
 pub fn config_path() -> PathBuf {

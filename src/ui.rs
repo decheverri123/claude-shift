@@ -27,6 +27,12 @@ pub fn render_box(title: &str, content_lines: &[String], border_color: Color) ->
     }
 
     let b = |s: &str| style(s).fg(border_color).to_string();
+    let content_row = |line: &str| -> String {
+        let raw = console::strip_ansi_codes(line);
+        let w = UnicodeWidthStr::width(raw.as_ref());
+        let pad = if max_width >= w + 2 { max_width - w - 2 } else { 0 };
+        format!(" {}  {}{}{}\n", b(" │"), line, " ".repeat(pad), b("│"))
+    };
 
     let mut out = String::new();
 
@@ -56,37 +62,13 @@ pub fn render_box(title: &str, content_lines: &[String], border_color: Color) ->
         b("╮")
     ));
 
-    // Empty top line
-    out.push_str(&format!(
-        " {} {}\n",
-        b(" │"),
-        b(&format!("{:width$}│", "", width = max_width))
-    ));
+    out.push_str(&content_row(""));
 
-    // Content lines
     for line in content_lines {
-        let raw = console::strip_ansi_codes(line);
-        let w = UnicodeWidthStr::width(raw.as_ref());
-        let pad = if max_width >= w + 2 {
-            max_width - w - 2
-        } else {
-            0
-        };
-        out.push_str(&format!(
-            " {}  {}{}{}\n",
-            b(" │"),
-            line,
-            " ".repeat(pad),
-            b("│")
-        ));
+        out.push_str(&content_row(line));
     }
 
-    // Empty bottom line
-    out.push_str(&format!(
-        " {} {}\n",
-        b(" │"),
-        b(&format!("{:width$}│", "", width = max_width))
-    ));
+    out.push_str(&content_row(""));
 
     // Bottom border: ╰────────────╯
     out.push_str(&format!(
@@ -535,4 +517,55 @@ pub fn print_presets_list(config: &Config) {
         "  Switch instantly: {}\n",
         style("cshift --preset <preset-name>").white()
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn visible_line_widths(rendered: &str) -> Vec<usize> {
+        rendered
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(|l| UnicodeWidthStr::width(console::strip_ansi_codes(l).as_ref()))
+            .collect()
+    }
+
+    #[test]
+    fn all_lines_share_the_same_visible_width() {
+        let out = render_box(
+            "Title",
+            &["short".to_string(), "a longer content line here".to_string()],
+            Color::White,
+        );
+        let widths = visible_line_widths(&out);
+        assert!(widths.windows(2).all(|w| w[0] == w[1]), "uneven widths: {:?}", widths);
+    }
+
+    #[test]
+    fn wide_unicode_title_keeps_lines_aligned() {
+        let out = render_box("👑 Epic Model  Status", &["plain line".to_string()], Color::White);
+        let widths = visible_line_widths(&out);
+        assert!(widths.windows(2).all(|w| w[0] == w[1]), "uneven widths: {:?}", widths);
+    }
+
+    #[test]
+    fn content_survives_rendering() {
+        let out = render_box("T", &["unique-content-marker".to_string()], Color::White);
+        assert!(console::strip_ansi_codes(&out).contains("unique-content-marker"));
+    }
+
+    #[test]
+    fn empty_title_does_not_panic_and_stays_aligned() {
+        let out = render_box("", &["x".to_string()], Color::White);
+        let widths = visible_line_widths(&out);
+        assert!(widths.windows(2).all(|w| w[0] == w[1]), "uneven widths: {:?}", widths);
+    }
+
+    #[test]
+    fn narrow_content_hits_the_minimum_box_width() {
+        let out = render_box("t", &["x".to_string()], Color::White);
+        let widths = visible_line_widths(&out);
+        assert!(widths.iter().all(|&w| w >= 74), "expected minimum width of 74: {:?}", widths);
+    }
 }

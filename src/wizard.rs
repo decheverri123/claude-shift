@@ -20,7 +20,14 @@ pub fn run_wizard(config: &Config) -> Result<(), String> {
     loop {
         // Reload current status and config on each loop
         let st = CurrentStatus::read();
-        let latest_config = config::load_config().unwrap_or_else(|_| config.clone());
+        let latest_config = config::load_config().unwrap_or_else(|e| {
+            eprintln!(
+                "{} {} — using the last known-good config for this screen.",
+                style("⚠").yellow().bold(),
+                e
+            );
+            config.clone()
+        });
 
         ui::print_status_card(&st, Some(&latest_config));
         println!();
@@ -160,7 +167,7 @@ fn handle_presets_flow(config: &Config) -> Result<FlowResult, String> {
 }
 
 /// Opens config.json in the user's default editor/viewer, or prints the path if unable.
-fn open_or_show_config_file() {
+pub fn open_or_show_config_file() {
     let path = config::config_path();
     if !path.exists() {
         if let Ok(p) = config::init() {

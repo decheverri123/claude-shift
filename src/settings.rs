@@ -32,10 +32,10 @@ pub fn tier_env_var(tier: &str) -> &'static str {
 /// Location of `~/.claude/settings.json`. Overridable for tests via
 /// `CSHIFT_CLAUDE_DIR`.
 pub fn claude_dir() -> PathBuf {
-    PathBuf::from(env::var("CSHIFT_CLAUDE_DIR").unwrap_or_else(|_| {
-        let home = env::var("HOME").expect("HOME is not set");
-        format!("{}/.claude", home)
-    }))
+    match env::var("CSHIFT_CLAUDE_DIR") {
+        Ok(dir) => PathBuf::from(dir),
+        Err(_) => crate::paths::home_dir().join(".claude"),
+    }
 }
 
 pub fn settings_path() -> PathBuf {
