@@ -85,13 +85,13 @@ First run: `cargo run -- init` creates `~/.config/cshift/config.json`, then edit
       "details": "🟢/🟡 Caps at Medium usage; pairs Gemma4 & Qwen 3.5 with DeepSeek Flash's 1M context."
     },
     {
-      "name": "OpenRouter Free",
+      "name": "OpenRouter Medium",
       "provider": "openrouter",
-      "haiku": "openrouter/free",
-      "medium": "openrouter/free",
-      "large": "openrouter/free",
-      "epic": "openrouter/free",
-      "details": "It's free real-estate."
+      "haiku": "google/gemini-3.7-flash",
+      "medium": "deepseek/deepseek-v4-pro-20260813",
+      "large": "x-ai/grok-4.6-20260810",
+      "epic": "openai/gpt-5.6-sol-20260709",
+      "details": "OpenRouter"
     },
   ]
 }
