@@ -95,12 +95,12 @@ Presets aren't shipped out of the box — `cshift init` scaffolds providers only
 
 Claude Code divides tasks across distinct agent tiers. `claude-shift` gives you full independent control over all 4 tiers:
 
-| Tier                | Claude Code Alias | Role & Workload                                                    | Recommended Models                                                              |
-| :------------------ | :---------------- | :----------------------------------------------------------------- | :------------------------------------------------------------------------------ |
-| 👑 **Epic Model**   | `opus` / `fable`  | Frontier autonomous agents, long-horizon planning & deep reasoning | **Claude Fable 5**, DeepSeek R1 (671B), Gemini 2.5 Pro, DeepSeek V4 Pro         |
-| 🦁 **Large Model**  | `opus` / `sonnet` | Flagship coding driver, heavy architecture & hybrid thinking       | **Claude 3.7 Sonnet**, Claude 3 Opus, Qwen 2.5 Coder 32B, DeepSeek V4 Flash     |
-| ⚡ **Medium Model** | `sonnet`          | Fast daily driver, refactoring, code fixes & standard edits        | **Claude 3.5 Sonnet**, DeepSeek V3 (Chat), Gemini 2.5 Flash, Qwen 2.5 Coder 14B |
-| 🐇 **Haiku Model**  | `haiku`           | Subagents, file searching, rapid bash commands, git commits        | **Claude 3.5 Haiku**, Gemini 2.5 Flash Lite, Gemma 4, Qwen 2.5 Coder 7B/1.5B    |
+| Tier                | Claude Code Alias | Role & Workload                                                    | Recommended Models                                                                                |
+| :------------------ | :---------------- | :----------------------------------------------------------------- | :------------------------------------------------------------------------------------------------ |
+| 👑 **Epic Model**   | `opus` / `fable`  | Frontier autonomous agents, long-horizon planning & deep reasoning | GPT-5.6 Sol, Kimi K3, GLM-5.3, Grok 4.6, DeepSeek R1 / V4 Pro                                     |
+| 🦁 **Large Model**  | `opus` / `sonnet` | Flagship coding driver, heavy architecture & hybrid thinking       | Gemini 3.1 Pro, Qwen3.8 Max, Muse Spark 1.2, DeepSeek V4 Flash, Qwen 2.5 Coder 32B                |
+| ⚡ **Medium Model**  | `sonnet`          | Fast daily driver, refactoring, code fixes & standard edits        | Gemini 3.7 Flash, GPT-5.6 Luna, Qwen3.8 27B, DeepSeek V4 Flash, Qwen 2.5 Coder 14B                |
+| 🐇 **Haiku Model**  | `haiku`           | Subagents, file searching, rapid bash commands, git commits        | Gemini 3.5 Flash Lite, Gemma 4 (26B/31B), Qwen3 VL 8B, Qwen 2.5 Coder 7B/1.5B                     |
 
 ---
 

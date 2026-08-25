@@ -307,9 +307,9 @@ fn handle_configure_flow(config: &Config) -> Result<FlowResult, String> {
         ),
         "openrouter" => (
             "deepseek/deepseek-r1",
-            "google/gemini-2.5-pro",
-            "google/gemini-2.5-flash",
-            "google/gemini-2.5-flash-lite",
+            "google/gemini-3.1-pro-preview",
+            "google/gemini-3.7-flash",
+            "google/gemini-3.5-flash-lite",
         ),
         "lmstudio" => (
             "qwen2.5-coder-32b-instruct",
@@ -491,6 +491,8 @@ fn prompt_model_tier(
     // 2. Add provider-specific suggestions
     let suggestions: &[&str] = match (provider_id, tier) {
         ("openrouter", "epic") => &[
+            "anthropic/claude-fable-5",
+            "anthropic/claude-opus-5",
             "deepseek/deepseek-r1",
             "z-ai/glm-5.3",
             "thudm/glm-4-plus",
@@ -498,14 +500,20 @@ fn prompt_model_tier(
             "deepseek/deepseek-r1-distill-llama-70b",
         ],
         ("openrouter", "large") => &[
-            "minimax/minimax-01",
+            "anthropic/claude-sonnet-5",
+            "anthropic/claude-opus-4.8",
+            "google/gemini-3.1-pro-preview",
             "google/gemini-2.5-pro",
+            "minimax/minimax-01",
             "z-ai/glm-4.7",
             "qwen/qwen-2.5-coder-32b-instruct",
             "qwen/qwen3-coder",
             "meta-llama/llama-3.3-70b-instruct",
         ],
         ("openrouter", "medium") => &[
+            "google/gemini-3.7-flash",
+            "google/gemini-3.5-flash",
+            "anthropic/claude-sonnet-4.5",
             "deepseek/deepseek-chat",
             "google/gemini-2.5-flash",
             "z-ai/glm-4.7-flash",
@@ -513,10 +521,14 @@ fn prompt_model_tier(
             "minimax/minimax-m2.1",
         ],
         ("openrouter", "haiku") => &[
+            "anthropic/claude-haiku-4.5",
+            "google/gemini-3.5-flash-lite",
+            "google/gemini-3.1-flash-lite",
+            "google/gemma-4-26b-a4b-it",
             "google/gemini-2.5-flash-lite",
             "qwen/qwen-2.5-coder-7b-instruct",
             "meta-llama/llama-3.1-8b-instruct",
-            "google/gemini-2.5-flash-lite:batch",
+            "google/gemini-3.5-flash-lite:batch",
         ],
         ("ollama", "epic") => &[
             "deepseek-v4-pro:cloud",
