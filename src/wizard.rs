@@ -144,7 +144,7 @@ fn handle_presets_flow(config: &Config) -> Result<FlowResult, String> {
         println!();
 
         let selection = Select::with_theme(&theme)
-            .with_prompt("Select a quick configuration preset (4-tier)")
+            .with_prompt("Select a quick configuration preset (4-tier). Press once to view new model presets. Press again to switch.")
             .items(&item_refs)
             .default(cursor)
             .interact_opt()
