@@ -56,7 +56,46 @@ cargo run -- --reset       # revert to Anthropic defaults
 cargo run                  # interactive wizard
 ```
 
-First run: `cargo run -- init` creates `~/.config/cshift/config.json`, then edit it to define your own providers and presets. Presets are entirely user-defined — this tool ships no hardcoded model opinions.
+First run: `cargo run -- init` creates `~/.config/cshift/config.json`, then edit it to define your own providers and presets. Presets are entirely user-defined — this tool ships no hardcoded model opinions. Example below:
+
+```json
+{
+  "providers": {
+    "lmstudio": {
+      "base_url": "http://localhost:1234",
+      "auth_token": "lm-studio"
+    },
+    "ollama": {
+      "base_url": "http://localhost:11434",
+      "auth_token": "ollama"
+    },
+    "openrouter": {
+      "base_url": "https://openrouter.ai/api",
+      "auth_token": "$OPENROUTER_API_KEY"
+    }
+  },
+  "presets": [
+    {
+      "name": "Ollama Cloud",
+      "provider": "ollama",
+      "haiku": "gemma4:cloud",
+      "medium": "nemotron-3-super:cloud",
+      "large": "qwen3.5:cloud",
+      "epic": "deepseek-v4-flash:cloud",
+      "details": "🟢/🟡 Caps at Medium usage; pairs Gemma4 & Qwen 3.5 with DeepSeek Flash's 1M context."
+    },
+    {
+      "name": "OpenRouter Free",
+      "provider": "openrouter",
+      "haiku": "openrouter/free",
+      "medium": "openrouter/free",
+      "large": "openrouter/free",
+      "epic": "openrouter/free",
+      "details": "It's free real-estate."
+    },
+  ]
+}
+```
 
 ---
 
