@@ -58,12 +58,30 @@ jobs:
           tar czf "cshift-${{ matrix.target }}.tar.gz" "$bin"
           mv "cshift-${{ matrix.target }}.tar.gz" "$GITHUB_WORKSPACE/"
 
-      - name: Hash artifacts
-        shell: bash
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cshift-${{ matrix.target }}
+          path: cshift-${{ matrix.target }}.tar.gz
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate Consolidated SHA256SUMS
         run: |
-          set -euo pipefail
-          cd "$GITHUB_WORKSPACE"
+          cd artifacts
           sha256sum cshift-*.tar.gz > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Create release
         if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -77,11 +95,11 @@ jobs:
             gh release create "$TAG" --title "$TAG" --generate-notes $PRERELEASE
           fi
 
-      - name: Upload to release
+      - name: Upload Assets to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.event.release.tag_name }}
           overwrite_files: true
           files: |
-            cshift-${{ matrix.target }}.tar.gz
-            SHA256SUMS
+            artifacts/cshift-*.tar.gz
+            artifacts/SHA256SUMS

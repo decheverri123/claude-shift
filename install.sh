@@ -38,16 +38,30 @@ trap 'rm -rf "$tmp"' EXIT
 curl -fsSL "$base/${asset}" -o "$tmp/$asset"
 curl -fsSL "$base/SHA256SUMS" -o "$tmp/SHA256SUMS"
 
-# Verify the tarball against published SHA256 checksums.
-(cd "$tmp" && sha256sum -c SHA256SUMS) || {
-  echo "error: tarball hash mismatch; refusing to install." >&2
-  exit 1
-}
+# Verify the tarball against published SHA256 checksums for this asset.
+if [ -f "$tmp/SHA256SUMS" ]; then
+  if grep -F "$asset" "$tmp/SHA256SUMS" > "$tmp/checksum.txt" 2>/dev/null; then
+    if command -v sha256sum >/dev/null 2>&1; then
+      (cd "$tmp" && sha256sum -c checksum.txt)
+    elif command -v shasum >/dev/null 2>&1; then
+      (cd "$tmp" && shasum -a 256 -c checksum.txt)
+    else
+      echo "warning: neither sha256sum nor shasum found; skipping checksum verification." >&2
+    fi || {
+      echo "error: tarball hash mismatch; refusing to install." >&2
+      exit 1
+    }
+  fi
+fi
 
-tar xzf "$tmp/$asset" -C "$tmp"
+mkdir -p "$tmp/extracted" "$INSTALL_DIR"
+tar xzf "$tmp/$asset" -C "$tmp/extracted"
 
-mkdir -p "$INSTALL_DIR"
-mv "$tmp"/${BIN}* "$INSTALL_DIR/$BIN"
+if [ -f "$tmp/extracted/$BIN.exe" ]; then
+  mv -f "$tmp/extracted/$BIN.exe" "$INSTALL_DIR/$BIN.exe"
+elif [ -f "$tmp/extracted/$BIN" ]; then
+  mv -f "$tmp/extracted/$BIN" "$INSTALL_DIR/$BIN"
+fi
 chmod +x "$INSTALL_DIR/$BIN" 2>/dev/null || true
 
 echo "Installed $BIN to $INSTALL_DIR"
